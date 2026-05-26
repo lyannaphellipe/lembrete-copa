@@ -53,7 +53,8 @@ def cancelar():
         """, 400
 
     try:
-        supabase = create_client(SUPABASE_URL, SUPABASE_KEY)
+        service_key = os.environ.get("SUPABASE_SERVICE_KEY")
+        supabase = create_client(SUPABASE_URL, service_key)
         supabase.table("subscribers").update({"ativo": False}).eq("email", email).execute()
         return f"""
         <html><body style="font-family:Arial;text-align:center;padding:60px;color:#222;">

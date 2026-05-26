@@ -3,8 +3,10 @@ import json
 import os
 import schedule
 import time
+import threading
 from datetime import datetime, timedelta
 from supabase import create_client
+from flask import Flask, request, jsonify
 
 # --- CONFIGURAÇÕES ---
 RESEND_API_KEY = os.environ.get("RESEND_API_KEY")
@@ -12,6 +14,7 @@ APISPORTS_KEY = os.environ.get("APISPORTS_KEY")
 SUPABASE_URL = os.environ.get("SUPABASE_URL")
 SUPABASE_KEY = os.environ.get("SUPABASE_KEY")
 MODO_TESTE = os.environ.get("TEST", "false").lower() == "true"
+BASE_URL = os.environ.get("BASE_URL", "https://lembrete-copa.up.railway.app")
 
 WORLD_CUP_LEAGUE = 1
 WORLD_CUP_SEASON = 2026
@@ -29,6 +32,45 @@ BANDEIRAS = {
     "Belgium": "🇧🇪", "Croatia": "🇭🇷", "Senegal": "🇸🇳",
     "default": "🏳️"
 }
+
+app = Flask(__name__)
+
+# --- FLASK ROUTES ---
+
+@app.route("/")
+def home():
+    return "Lembrete Copa 2026 rodando."
+
+@app.route("/cancelar")
+def cancelar():
+    email = request.args.get("email", "").strip().lower()
+    if not email or "@" not in email:
+        return """
+        <html><body style="font-family:Arial;text-align:center;padding:60px;">
+        <h2>❌ Link inválido</h2>
+        <p>Email não encontrado. Tente novamente.</p>
+        </body></html>
+        """, 400
+
+    try:
+        supabase = create_client(SUPABASE_URL, SUPABASE_KEY)
+        supabase.table("subscribers").update({"ativo": False}).eq("email", email).execute()
+        return f"""
+        <html><body style="font-family:Arial;text-align:center;padding:60px;color:#222;">
+        <h2>✅ Cancelamento confirmado</h2>
+        <p>O email <strong>{email}</strong> foi removido da lista.</p>
+        <p style="color:#888;font-size:13px;">Você não receberá mais emails do Lembrete Copa 2026.</p>
+        </body></html>
+        """
+    except Exception as e:
+        return f"""
+        <html><body style="font-family:Arial;text-align:center;padding:60px;">
+        <h2>❌ Erro ao cancelar</h2>
+        <p>Tente novamente mais tarde.</p>
+        </body></html>
+        """, 500
+
+# --- FUNÇÕES ---
 
 def bandeira(pais):
     return BANDEIRAS.get(pais, BANDEIRAS["default"])
@@ -74,7 +116,6 @@ def montar_resumo_jogo(jogo):
     fixture = jogo.get("fixture", {})
     teams = jogo.get("teams", {})
     goals = jogo.get("goals", {})
-    score = jogo.get("score", {})
 
     home = teams.get("home", {}).get("name", "")
     away = teams.get("away", {}).get("name", "")
@@ -150,12 +191,14 @@ def montar_jogo_hoje(jogo):
         <p style="margin:4px 0;font-size:13px;color:#1a73e8;">📺 {canais_str}</p>
     </div>"""
 
-def montar_email(jogos_ontem, jogos_hoje):
+def montar_email(jogos_ontem, jogos_hoje, email_destinatario):
     hoje = datetime.now()
     meses = ["janeiro","fevereiro","março","abril","maio","junho",
              "julho","agosto","setembro","outubro","novembro","dezembro"]
     data_str = f"{hoje.day} de {meses[hoje.month-1]} de {hoje.year}"
     modo = " <em style='color:#e67e22;'>[TESTE]</em>" if MODO_TESTE else ""
+
+    link_cancelar = f"{BASE_URL}/cancelar?email={email_destinatario}"
 
     secao_ontem = ""
     if jogos_ontem:
@@ -163,8 +206,7 @@ def montar_email(jogos_ontem, jogos_hoje):
         secao_ontem = f"""
         <h2 style="font-size:16px;color:#333;border-bottom:2px solid #1a73e8;padding-bottom:6px;">
             📋 Resultados de ontem
-        </h2>
-        {blocos}"""
+        </h2>{blocos}"""
     else:
         secao_ontem = '<p style="color:#888;">Não houve jogos ontem.</p>'
 
@@ -174,8 +216,7 @@ def montar_email(jogos_ontem, jogos_hoje):
         secao_hoje = f"""
         <h2 style="font-size:16px;color:#333;border-bottom:2px solid #27ae60;padding-bottom:6px;margin-top:28px;">
             ⚽ Jogos de hoje ({len(jogos_hoje)} jogo{'s' if len(jogos_hoje) > 1 else ''})
-        </h2>
-        {blocos}"""
+        </h2>{blocos}"""
     else:
         secao_hoje = '<p style="color:#888;margin-top:20px;">Não há jogos programados para hoje.</p>'
 
@@ -188,7 +229,8 @@ def montar_email(jogos_ontem, jogos_hoje):
         {secao_ontem}
         {secao_hoje}
         <p style="font-size:11px;color:#aaa;margin-top:32px;border-top:1px solid #eee;padding-top:12px;">
-            Projeto Lembrete Copa 2026 · Para cancelar, responda este email com "cancelar"
+            Projeto Lembrete Copa 2026 · 
+            <a href="{link_cancelar}" style="color:#aaa;">Cancelar inscrição</a>
         </p>
     </div>"""
 
@@ -222,8 +264,6 @@ def executar():
 
     print(f"Jogos ontem: {len(jogos_ontem)} | Jogos hoje: {len(jogos_hoje)}")
 
-    html = montar_email(jogos_ontem, jogos_hoje)
-
     if MODO_TESTE:
         emails = [os.environ.get("EMAIL_DESTINATARIO")]
     else:
@@ -232,14 +272,25 @@ def executar():
     print(f"Enviando para {len(emails)} email(s)...")
     ok = 0
     for email in emails:
+        html = montar_email(jogos_ontem, jogos_hoje, email)
         if enviar_email(email, html):
             ok += 1
     print(f"Enviados: {ok}/{len(emails)}")
 
-schedule.every().day.at("08:00").do(executar)
-print("Serviço Copa 2026 iniciado. Rodando às 08:00 todos os dias...")
-executar()
+# --- AGENDAMENTO EM THREAD SEPARADA ---
 
-while True:
-    schedule.run_pending()
-    time.sleep(60)
+def rodar_scheduler():
+    schedule.every().day.at("08:00").do(executar)
+    print("Scheduler iniciado. Rodando às 08:00 todos os dias...")
+    while True:
+        schedule.run_pending()
+        time.sleep(60)
+
+# --- INICIALIZAÇÃO ---
+
+if __name__ == "__main__":
+    executar()
+    t = threading.Thread(target=rodar_scheduler, daemon=True)
+    t.start()
+    port = int(os.environ.get("PORT", 8080))
+    app.run(host="0.0.0.0", port=port)

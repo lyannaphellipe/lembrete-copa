@@ -1,0 +1,140 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Copa do Mundo 2026 — Resumo Diário</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body {
+    font-family: Arial, sans-serif;
+    background: linear-gradient(135deg, #1a73e8, #27ae60);
+    min-height: 100vh;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 20px;
+  }
+  .card {
+    background: white;
+    border-radius: 16px;
+    padding: 40px;
+    max-width: 480px;
+    width: 100%;
+    text-align: center;
+    box-shadow: 0 20px 60px rgba(0,0,0,0.2);
+  }
+  .emoji { font-size: 56px; margin-bottom: 16px; }
+  h1 { font-size: 24px; color: #222; margin-bottom: 8px; }
+  p { color: #666; font-size: 15px; line-height: 1.6; margin-bottom: 24px; }
+  .features {
+    text-align: left;
+    background: #f8f9fa;
+    border-radius: 8px;
+    padding: 16px;
+    margin-bottom: 24px;
+  }
+  .feature { display: flex; align-items: center; gap: 10px; margin-bottom: 8px; font-size: 14px; color: #444; }
+  input[type="email"] {
+    width: 100%;
+    padding: 14px 16px;
+    border: 2px solid #e0e0e0;
+    border-radius: 8px;
+    font-size: 16px;
+    margin-bottom: 12px;
+    transition: border-color 0.2s;
+  }
+  input[type="email"]:focus { outline: none; border-color: #1a73e8; }
+  button {
+    width: 100%;
+    padding: 14px;
+    background: linear-gradient(135deg, #1a73e8, #27ae60);
+    color: white;
+    border: none;
+    border-radius: 8px;
+    font-size: 16px;
+    font-weight: bold;
+    cursor: pointer;
+    transition: opacity 0.2s;
+  }
+  button:hover { opacity: 0.9; }
+  button:disabled { opacity: 0.6; cursor: not-allowed; }
+  .msg { margin-top: 16px; padding: 12px; border-radius: 8px; font-size: 14px; display: none; }
+  .msg.ok { background: #e8f5e9; color: #2e7d32; display: block; }
+  .msg.erro { background: #ffebee; color: #c62828; display: block; }
+  .disclaimer { font-size: 11px; color: #aaa; margin-top: 16px; }
+</style>
+</head>
+<body>
+<div class="card">
+  <div class="emoji">🏆</div>
+  <h1>Copa do Mundo 2026</h1>
+  <p>Receba todo dia às 8h um resumo dos jogos de ontem e a programação do dia — direto no seu email.</p>
+  <div class="features">
+    <div class="feature">⚽ Resultados com gols e quem marcou</div>
+    <div class="feature">🟨 Cartões amarelos e vermelhos</div>
+    <div class="feature">📺 Onde assistir os jogos de hoje</div>
+    <div class="feature">🕐 Horários no fuso de Brasília</div>
+  </div>
+  <input type="email" id="email" placeholder="seu@email.com" />
+  <button id="btn" onclick="cadastrar()">Quero receber!</button>
+  <div class="msg" id="msg"></div>
+  <p class="disclaimer">Gratuito. Sem spam. Cancele quando quiser.</p>
+</div>
+
+<script>
+const SUPABASE_URL = 'https://pppgmyqymnzjtrgvlwax.supabase.co';
+const SUPABASE_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InBwcGdteXF5bW56anRyZ3Zsd2F4Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3Nzk4MjU1NTcsImV4cCI6MjA5NTQwMTU1N30.C6dv-vvZSiUVlSvpgzlrQeMNgWert9rLfU2-tZz48So';
+
+async function cadastrar() {
+  const email = document.getElementById('email').value.trim();
+  const btn = document.getElementById('btn');
+  const msg = document.getElementById('msg');
+
+  if (!email || !email.includes('@')) {
+    msg.className = 'msg erro';
+    msg.textContent = 'Digite um email válido.';
+    return;
+  }
+
+  btn.disabled = true;
+  btn.textContent = 'Cadastrando...';
+  msg.className = 'msg';
+
+  try {
+    const res = await fetch(`${SUPABASE_URL}/rest/v1/subscribers`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'apikey': SUPABASE_KEY,
+        'Authorization': `Bearer ${SUPABASE_KEY}`,
+        'Prefer': 'return=minimal'
+      },
+      body: JSON.stringify({ email, ativo: true })
+    });
+
+    if (res.ok || res.status === 201) {
+      msg.className = 'msg ok';
+      msg.textContent = '✅ Cadastrado! Você receberá o primeiro email amanhã às 8h.';
+      document.getElementById('email').value = '';
+    } else if (res.status === 409) {
+      msg.className = 'msg ok';
+      msg.textContent = '✅ Este email já está cadastrado!';
+    } else {
+      throw new Error('Erro ao cadastrar');
+    }
+  } catch(e) {
+    msg.className = 'msg erro';
+    msg.textContent = 'Erro ao cadastrar. Tente novamente.';
+  }
+
+  btn.disabled = false;
+  btn.textContent = 'Quero receber!';
+}
+
+document.getElementById('email').addEventListener('keypress', function(e) {
+  if (e.key === 'Enter') cadastrar();
+});
+</script>
+</body>
+</html>

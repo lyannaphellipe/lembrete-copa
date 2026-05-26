@@ -14,6 +14,7 @@ APISPORTS_KEY = os.environ.get("APISPORTS_KEY")
 SUPABASE_URL = os.environ.get("SUPABASE_URL")
 SUPABASE_KEY = os.environ.get("SUPABASE_KEY")
 MODO_TESTE = os.environ.get("TEST", "false").lower() == "true"
+MODO_TESTE_ALL = os.environ.get("TEST_ALL", "false").lower() == "true"
 BASE_URL = os.environ.get("BASE_URL", "https://lembrete-copa.up.railway.app")
 
 WORLD_CUP_LEAGUE = 1
@@ -267,6 +268,9 @@ def executar():
 
     if MODO_TESTE:
         emails = [os.environ.get("EMAIL_DESTINATARIO")]
+    elif MODO_TESTE_ALL:
+        emails = buscar_emails()
+        print(f"Modo TEST_ALL: enviando para todos os {len(emails)} cadastrados")
     else:
         emails = buscar_emails()
 

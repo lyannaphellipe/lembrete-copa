@@ -237,7 +237,8 @@ def montar_email(jogos_ontem, jogos_hoje, email_destinatario):
     </div>"""
 
 def buscar_emails():
-    supabase = create_client(SUPABASE_URL, SUPABASE_KEY)
+    service_key = os.environ.get("SUPABASE_SERVICE_KEY")
+    supabase = create_client(SUPABASE_URL, service_key)
     result = supabase.table("subscribers").select("email").eq("ativo", True).execute()
     return [row["email"] for row in result.data]
 

@@ -30,6 +30,18 @@ BANDEIRAS = {
     "South Korea": "🇰🇷", "Morocco": "🇲🇦", "Netherlands": "🇳🇱",
     "Belgium": "🇧🇪", "Croatia": "🇭🇷", "Senegal": "🇸🇳",
     "Ecuador": "🇪🇨", "Switzerland": "🇨🇭", "Serbia": "🇷🇸",
+    "Costa Rica": "🇨🇷", "Paraguay": "🇵🇾", "Chile": "🇨🇱",
+    "Colombia": "🇨🇴", "Venezuela": "🇻🇪", "Peru": "🇵🇪",
+    "Saudi Arabia": "🇸🇦", "Iran": "🇮🇷", "Qatar": "🇶🇦",
+    "Australia": "🇦🇺", "Poland": "🇵🇱", "Denmark": "🇩🇰",
+    "Bosnia and Herzegovina": "🇧🇦", "South Africa": "🇿🇦",
+    "Czech Republic": "🇨🇿", "Haiti": "🇭🇹", "Scotland": "🏴󠁧󠁢󠁳󠁣󠁴󠁿",
+    "Albania": "🇦🇱", "Austria": "🇦🇹", "Hungary": "🇭🇺",
+    "Romania": "🇷🇴", "Slovakia": "🇸🇰", "Slovenia": "🇸🇮",
+    "Ukraine": "🇺🇦", "Turkey": "🇹🇷", "Greece": "🇬🇷",
+    "Nigeria": "🇳🇬", "Egypt": "🇪🇬", "Cameroon": "🇨🇲",
+    "Ghana": "🇬🇭", "Tunisia": "🇹🇳", "Algeria": "🇩🇿",
+    "New Zealand": "🇳🇿", "Indonesia": "🇮🇩", "China PR": "🇨🇳",
     "default": "🏳️"
 }
 
@@ -46,19 +58,37 @@ def data_brasilia(delta_dias=0):
     alvo = agora_br + timedelta(days=delta_dias)
     return alvo.strftime("%Y-%m-%d")
 
-def buscar_jogos_por_data(data):
-    url = f"https://api.football-data.org/v4/competitions/WC/matches?dateFrom={data}&dateTo={data}"
+def buscar_jogos_por_dia_brasilia(data_br):
+    # Busca cobrindo o dia inteiro em Brasília = UTC-3
+    # Um dia em Brasília vai de 03:00 UTC até 03:00 UTC do dia seguinte
+    date_from = data_br  # 00:00 Brasília = 03:00 UTC = ainda data_br em UTC
+    # Para cobrir até meia-noite de Brasília precisamos pegar o dia seguinte em UTC
+    dt = datetime.strptime(data_br, "%Y-%m-%d")
+    date_to_utc = (dt + timedelta(days=1)).strftime("%Y-%m-%d")
+
+    url = f"https://api.football-data.org/v4/competitions/WC/matches?dateFrom={data_br}&dateTo={date_to_utc}"
     try:
         r = requests.get(url, headers=headers_api(), timeout=15)
-        print(f"API status: {r.status_code} para {data}")
+        print(f"API status: {r.status_code} para {data_br}")
         if r.status_code == 200:
-            matches = r.json().get("matches", [])
-            print(f"Jogos encontrados para {data}: {len(matches)}")
-            return matches
+            todos = r.json().get("matches", [])
+            # Filtra apenas jogos cujo horário em Brasília cai no dia correto
+            jogos_do_dia = []
+            for j in todos:
+                utc_str = j.get("utcDate", "")
+                try:
+                    dt_utc = datetime.strptime(utc_str[:19], "%Y-%m-%dT%H:%M:%S")
+                    dt_br = dt_utc - timedelta(hours=3)
+                    if dt_br.strftime("%Y-%m-%d") == data_br:
+                        jogos_do_dia.append(j)
+                except:
+                    pass
+            print(f"Jogos em horário Brasília para {data_br}: {len(jogos_do_dia)}")
+            return jogos_do_dia
         else:
             print(f"Erro API: {r.status_code} - {r.text[:300]}")
     except Exception as e:
-        print(f"Erro ao buscar {data}: {e}")
+        print(f"Erro ao buscar {data_br}: {e}")
     return []
 
 def converter_horario_utc(utc_str):
@@ -92,18 +122,18 @@ def montar_resumo_jogo(jogo):
         else:
             gols_away_lista.append(entrada)
     html = f"""
-    <div style="margin-bottom:20px;padding:16px;background:#f8f9fa;border-radius:8px;border-left:4px solid #1a73e8;">
-        <p style="margin:0 0 6px;font-size:16px;font-weight:bold;">
-            {bandeira(home)} {home} {gols_home} x {gols_away} {bandeira(away)} {away}
+    <div style="margin-bottom:14px;padding:14px 16px;background:#f8f9fa;border-radius:8px;border-left:4px solid #1a73e8;">
+        <p style="margin:0 0 4px;font-size:15px;font-weight:bold;">
+            {bandeira(home)} {home} {gols_home} x {gols_away} {away} {bandeira(away)}
         </p>"""
     if gols_home_lista:
-        html += f'<p style="margin:2px 0;font-size:13px;color:#555;">⚽ {", ".join(gols_home_lista)}</p>'
+        html += f'<p style="margin:2px 0;font-size:12px;color:#555;">⚽ {", ".join(gols_home_lista)}</p>'
     if gols_away_lista:
-        html += f'<p style="margin:2px 0;font-size:13px;color:#555;">⚽ {", ".join(gols_away_lista)}</p>'
+        html += f'<p style="margin:2px 0;font-size:12px;color:#555;">⚽ {", ".join(gols_away_lista)}</p>'
     html += "</div>"
     return html
 
-def montar_jogo_hoje(jogo):
+def montar_jogo_programado(jogo):
     status = jogo.get("status", "")
     if status == "FINISHED":
         return ""
@@ -113,36 +143,50 @@ def montar_jogo_hoje(jogo):
     venue = jogo.get("venue", "") or ""
     canais = TRANSMISSOES.get("Brazil") if "Brazil" in [home, away] else TRANSMISSOES["default"]
     return f"""
-    <div style="margin-bottom:16px;padding:16px;background:#fff;border-radius:8px;border:1px solid #e0e0e0;">
+    <div style="margin-bottom:12px;padding:14px 16px;background:#fff;border-radius:8px;border:1px solid #e0e0e0;">
         <p style="margin:0 0 4px;font-size:15px;font-weight:bold;">
-            {bandeira(home)} {home} x {bandeira(away)} {away}
+            {bandeira(home)} {home} x {away} {bandeira(away)}
         </p>
-        <p style="margin:2px 0;font-size:13px;color:#555;">🕐 {horario} (Brasília)</p>
-        {"<p style='margin:2px 0;font-size:13px;color:#555;'>📍 " + venue + "</p>" if venue else ""}
-        <p style="margin:4px 0;font-size:13px;color:#1a73e8;">📺 {" · ".join(canais)}</p>
+        <p style="margin:2px 0;font-size:12px;color:#555;">🕐 {horario} · {"📍 " + venue + " · " if venue else ""}📺 {" · ".join(canais)}</p>
     </div>"""
 
-def montar_email(jogos_ontem, jogos_hoje, email_destinatario):
+def montar_secao(titulo, cor, blocos):
+    if not blocos:
+        return ""
+    n = len(blocos)
+    plural = "s" if n > 1 else ""
+    return f"""
+    <h2 style="font-size:15px;font-weight:bold;color:#333;border-bottom:2px solid {cor};padding-bottom:6px;margin-top:24px;margin-bottom:12px;">
+        {titulo} ({n} jogo{plural})
+    </h2>{"".join(blocos)}"""
+
+def montar_email(jogos_ontem, jogos_hoje, jogos_amanha, email_destinatario):
     hoje_br = datetime.utcnow() - timedelta(hours=3)
     meses = ["janeiro","fevereiro","março","abril","maio","junho",
              "julho","agosto","setembro","outubro","novembro","dezembro"]
     data_str = f"{hoje_br.day} de {meses[hoje_br.month-1]} de {hoje_br.year}"
     modo = " <em style='color:#e67e22;'>[TESTE]</em>" if (MODO_TESTE or MODO_TESTE_ALL) else ""
     link_cancelar = f"{BASE_URL}/cancelar?email={email_destinatario}"
+
     blocos_ontem = [b for b in [montar_resumo_jogo(j) for j in jogos_ontem] if b]
-    blocos_hoje = [b for b in [montar_jogo_hoje(j) for j in jogos_hoje] if b]
-    secao_ontem = f'<h2 style="font-size:16px;color:#333;border-bottom:2px solid #1a73e8;padding-bottom:6px;">📋 Resultados de ontem</h2>{"".join(blocos_ontem)}' if blocos_ontem else '<p style="color:#888;">Não houve jogos encerrados ontem.</p>'
-    secao_hoje = f'<h2 style="font-size:16px;color:#333;border-bottom:2px solid #27ae60;padding-bottom:6px;margin-top:28px;">⚽ Jogos de hoje ({len(blocos_hoje)} jogo{"s" if len(blocos_hoje)>1 else ""})</h2>{"".join(blocos_hoje)}' if blocos_hoje else '<p style="color:#888;margin-top:20px;">Não há jogos programados para hoje.</p>'
+    blocos_hoje = [b for b in [montar_jogo_programado(j) for j in jogos_hoje] if b]
+    blocos_amanha = [b for b in [montar_jogo_programado(j) for j in jogos_amanha] if b]
+
+    secao_ontem = montar_secao("📋 Resultados de ontem", "#1a73e8", blocos_ontem) or '<p style="color:#888;font-size:13px;">Não houve jogos ontem.</p>'
+    secao_hoje = montar_secao("⚽ Jogos de hoje", "#27ae60", blocos_hoje) or '<p style="color:#888;font-size:13px;margin-top:16px;">Sem jogos hoje.</p>'
+    secao_amanha = montar_secao("📅 Jogos de amanhã", "#e67e22", blocos_amanha)
+
     return f"""
-    <div style="font-family:Arial,sans-serif;max-width:600px;margin:auto;padding:20px;color:#222;">
-        <div style="background:linear-gradient(135deg,#1a73e8,#27ae60);padding:20px;border-radius:10px;margin-bottom:24px;">
-            <h1 style="color:white;margin:0;font-size:22px;">🏆 Copa do Mundo 2026{modo}</h1>
-            <p style="color:rgba(255,255,255,0.9);margin:4px 0 0;">Bom dia! Hoje é <strong>{data_str}</strong></p>
+    <div style="font-family:Arial,sans-serif;max-width:580px;margin:auto;padding:20px;color:#222;">
+        <div style="background:linear-gradient(135deg,#1a73e8,#27ae60);padding:18px 20px;border-radius:10px;margin-bottom:20px;">
+            <h1 style="color:white;margin:0;font-size:20px;">🏆 Copa do Mundo 2026{modo}</h1>
+            <p style="color:rgba(255,255,255,0.9);margin:4px 0 0;font-size:14px;">Bom dia! Hoje é <strong>{data_str}</strong></p>
         </div>
         {secao_ontem}
         {secao_hoje}
-        <p style="font-size:11px;color:#aaa;margin-top:32px;border-top:1px solid #eee;padding-top:12px;">
-            Projeto Lembrete Copa 2026 · <a href="{link_cancelar}" style="color:#aaa;">Cancelar inscrição</a>
+        {secao_amanha}
+        <p style="font-size:11px;color:#bbb;margin-top:28px;border-top:1px solid #eee;padding-top:10px;">
+            Projeto Lembrete Copa 2026 · <a href="{link_cancelar}" style="color:#bbb;">Cancelar inscrição</a>
         </p>
     </div>"""
 
@@ -177,19 +221,24 @@ def executar():
     print(f"\n=== RODANDO BR: {datetime.utcnow() - timedelta(hours=3)} ===")
     data_ontem = data_brasilia(-1)
     data_hoje = data_brasilia(0)
-    print(f"Buscando: ontem={data_ontem} hoje={data_hoje}")
-    jogos_ontem = buscar_jogos_por_data(data_ontem)
-    jogos_hoje = buscar_jogos_por_data(data_hoje)
+    data_amanha = data_brasilia(1)
+    print(f"Buscando: ontem={data_ontem} hoje={data_hoje} amanha={data_amanha}")
+
+    jogos_ontem = buscar_jogos_por_dia_brasilia(data_ontem)
+    jogos_hoje = buscar_jogos_por_dia_brasilia(data_hoje)
+    jogos_amanha = buscar_jogos_por_dia_brasilia(data_amanha)
+
     if MODO_TESTE:
         emails = [os.environ.get("EMAIL_DESTINATARIO")]
     else:
         emails = buscar_emails()
         if MODO_TESTE_ALL:
             print(f"TEST_ALL: {len(emails)} cadastrados")
+
     print(f"Enviando para {len(emails)} email(s)...")
     ok = 0
     for email in emails:
-        html = montar_email(jogos_ontem, jogos_hoje, email)
+        html = montar_email(jogos_ontem, jogos_hoje, jogos_amanha, email)
         if enviar_email(email, html):
             ok += 1
     print(f"Resultado: {ok}/{len(emails)} enviados")

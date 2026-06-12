@@ -16,11 +16,11 @@ MODO_TESTE_ALL = os.environ.get("TEST_ALL", "false").lower() == "true"
 BASE_URL = os.environ.get("BASE_URL", "https://lembrete-copa-production.up.railway.app")
 
 TRANSMISSOES = {
-    "Brazil": ["Globo", "SporTV", "CazéTV"],
-    "Mexico": ["SporTV", "CazéTV"],
-    "USA": ["SporTV", "CazéTV"],
-    "Canada": ["SporTV", "CazéTV"],
-    "default": ["SporTV", "CazéTV"]
+    "Brazil": ["Globo", "CazéTV"],
+    "Mexico": ["CazéTV"],
+    "USA": ["CazéTV"],
+    "Canada": ["CazéTV"],
+    "default": ["CazéTV"]
 }
 
 BANDEIRAS = {

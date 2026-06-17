@@ -260,7 +260,7 @@ def cancelar():
         return "<html><body style='font-family:Arial;text-align:center;padding:60px;'><h2>Erro ao cancelar</h2></body></html>", 500
 
 def rodar_scheduler():
-    schedule.every().day.at("11:00").do(executar)
+    schedule.every().day.at("13:50").do(executar)
     print("Scheduler: 11:00 UTC = 08:00 Brasília")
     while True:
         schedule.run_pending()
